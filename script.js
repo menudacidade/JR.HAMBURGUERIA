@@ -90,6 +90,12 @@ function fmt(value) {
   return "R$ " + value.toFixed(2).replace(".", ",");
 }
 
+function gerarNumeroPedido() {
+  const ms = Date.now();
+  const r = Math.floor(Math.random() * 1000);
+  return `${ms}${String(r).padStart(3, "0")}`.slice(-6);
+}
+
 /* ======================================================
    SELOS — ROTAÇÃO DIÁRIA AUTOMÁTICA
    A cada dia, dois produtos diferentes recebem os selos.
@@ -480,7 +486,11 @@ function finalizarPedido() {
     pagamento === "dinheiro" ? `💵 *Troco para:* ${troco || "Não precisa de troco"}` : null
   ].filter(Boolean).join("\n");
 
+  const numeroPedido = gerarNumeroPedido();
+
   const msg = [
+    `*PEDIDO #${numeroPedido}*`,
+    ``,
     `🍔 *JR BURGUER — Novo Pedido*`,
     ``,
     ...lines,
