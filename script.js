@@ -1,6 +1,11 @@
 /**
- * JR BURGUER — Premium Cardápio
- * Para trocar imagens: substitua o valor de `image` pelo caminho real.
+ * JR BURGUER — CARDÁPIO DIGITAL
+ * script.js
+ *
+ * Para editar produtos: altere os arrays BURGERS e DRINKS abaixo.
+ * Para trocar imagens: substitua o campo `image` pelo caminho da sua foto.
+ *   Exemplo: image: 'img/jr-burguer.jpg'
+ *   Deixando image: null → exibe o emoji como placeholder.
  */
 
 /* ======================================================
@@ -38,10 +43,19 @@ const BURGERS = [
   {
     id: 5,
     name: "JR Imperador",
-    desc: "Pão artesanal, molho caseiro, hambúrguer duplo (400g), queijo cheddar, bacon, alface e tomate. O mais completo!",
-    price: 45.0,
-    image: "jrbaconduplo.png"
+    desc: "Uma combinação irresistível de 200g de carne bovina suculenta, bacon crocante, cebola caramelizada e molho caseiro especial, servidos em pão gergelim.",
+    price: 32.0,
+    image: "jrimperador.png"
   }
+];
+
+/* ======================================================
+   DADOS — ADICIONAIS (TODOS OS LANCHES)
+====================================================== */
+const EXTRAS = [
+  { id: "carne", name: "Carne adicional 200g", price: 10.0 },
+  { id: "queijo", name: "Queijo adicional", price: 2.0 },
+  { id: "bacon", name: "Bacon adicional", price: 5.0 }
 ];
 
 /* ======================================================
@@ -82,18 +96,49 @@ const WHATSAPP_NUMBER = "5542998462451";
 let cart           = [];
 let currentProduct = null;
 let modalQty       = 1;
+let modalExtras    = {};
+
+function resetModalExtras() {
+  modalExtras = {};
+  EXTRAS.forEach((extra) => {
+    modalExtras[extra.id] = 0;
+  });
+}
+
+function isBurger(product) {
+  return BURGERS.some((burger) => burger.id === product.id);
+}
+
+function extrasKey(extras) {
+  return EXTRAS.map((extra) => `${extra.id}:${extras[extra.id] || 0}`).join("|");
+}
+
+function getExtrasTotal(extras) {
+  return EXTRAS.reduce((sum, extra) => sum + extra.price * (extras[extra.id] || 0), 0);
+}
+
+function getUnitPrice(product, extras) {
+  if (!isBurger(product)) return product.price;
+  return product.price + getExtrasTotal(extras || {});
+}
+
+function formatExtrasText(extras) {
+  const parts = EXTRAS
+    .filter((extra) => (extras[extra.id] || 0) > 0)
+    .map((extra) => `${extra.name} x${extras[extra.id]}`);
+
+  return parts.length ? parts.join(", ") : null;
+}
+
+function getCartKey(product, extras) {
+  return isBurger(product) ? `${product.id}-${extrasKey(extras)}` : String(product.id);
+}
 
 /* ======================================================
    HELPERS
 ====================================================== */
 function fmt(value) {
   return "R$ " + value.toFixed(2).replace(".", ",");
-}
-
-function gerarNumeroPedido() {
-  const ms = Date.now();
-  const r = Math.floor(Math.random() * 1000);
-  return `${ms}${String(r).padStart(3, "0")}`.slice(-6);
 }
 
 /* ======================================================
@@ -150,8 +195,7 @@ function renderBurgers() {
     card.addEventListener("click", () => openModal(p));
     card.querySelector(".btn-card").addEventListener("click", (e) => {
       e.stopPropagation();
-      addToCart(p, 1);
-      animateCardBtn(e.currentTarget);
+      openModal(p);
     });
 
     grid.appendChild(card);
@@ -246,6 +290,7 @@ function openModal(product) {
   if (modalIndex < 0) modalIndex = 0;
 
   modalQty = 1;
+  resetModalExtras();
   buildCarousel();
   syncModalInfo();
 
@@ -308,19 +353,88 @@ function goToSlide(index) {
   modalIndex = index;
   currentProduct = modalList[index];
   modalQty = 1;
+  resetModalExtras();
   syncModalInfo();
+}
+
+function buildExtrasUI() {
+  const extrasWrap = document.getElementById("modalExtras");
+  const extrasList = document.getElementById("modalExtrasList");
+  extrasList.innerHTML = "";
+
+  EXTRAS.forEach((extra) => {
+    const row = document.createElement("div");
+    row.className = "modal__extra-row";
+    row.innerHTML = `
+      <div class="modal__extra-info">
+        <span class="modal__extra-name">${extra.name}</span>
+        <span class="modal__extra-price">+ ${fmt(extra.price)}</span>
+      </div>
+      <div class="modal__extra-qty">
+        <button type="button" class="modal__extra-qty-btn" data-extra="${extra.id}" data-delta="-1" aria-label="Menos ${extra.name}">−</button>
+        <span class="modal__extra-qty-val" data-extra-val="${extra.id}">0</span>
+        <button type="button" class="modal__extra-qty-btn" data-extra="${extra.id}" data-delta="1" aria-label="Mais ${extra.name}">+</button>
+      </div>
+    `;
+    extrasList.appendChild(row);
+  });
+
+  extrasList.querySelectorAll(".modal__extra-qty-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      changeExtraQty(btn.dataset.extra, Number(btn.dataset.delta));
+    });
+  });
+
+  extrasWrap.classList.remove("is-hidden");
+}
+
+function changeExtraQty(extraId, delta) {
+  const nextQty = (modalExtras[extraId] || 0) + delta;
+  if (nextQty < 0) return;
+
+  modalExtras[extraId] = nextQty;
+
+  const valueEl = document.querySelector(`[data-extra-val="${extraId}"]`);
+  if (valueEl) valueEl.textContent = String(nextQty);
+
+  document.querySelectorAll(`.modal__extra-qty-btn[data-extra="${extraId}"]`).forEach((btn) => {
+    if (Number(btn.dataset.delta) === -1) {
+      btn.disabled = nextQty <= 0;
+    }
+  });
+
+  updateModalTotal();
 }
 
 function syncModalInfo() {
   const p = modalList[modalIndex];
+  currentProduct = p;
 
-  // categoria
-  const inBurgers = BURGERS.some((b) => b.id === p.id);
+  const inBurgers = isBurger(p);
   document.getElementById("modalCategory").textContent = inBurgers ? "🍔 Hambúrgueres" : "🥤 Bebidas";
 
-  document.getElementById("modalName").textContent  = p.name;
-  document.getElementById("modalQtyVal").textContent = "1";
-  document.getElementById("modalPrice").textContent  = fmt(p.price);
+  document.getElementById("modalName").textContent = p.name;
+  document.getElementById("modalQtyVal").textContent = String(modalQty);
+  document.getElementById("modalPrice").textContent = fmt(p.price);
+
+  const extrasWrap = document.getElementById("modalExtras");
+  if (inBurgers) {
+    buildExtrasUI();
+    EXTRAS.forEach((extra) => {
+      const valueEl = document.querySelector(`[data-extra-val="${extra.id}"]`);
+      if (valueEl) valueEl.textContent = String(modalExtras[extra.id] || 0);
+
+      document.querySelectorAll(`.modal__extra-qty-btn[data-extra="${extra.id}"]`).forEach((btn) => {
+        if (Number(btn.dataset.delta) === -1) {
+          btn.disabled = (modalExtras[extra.id] || 0) <= 0;
+        }
+      });
+    });
+  } else {
+    extrasWrap.classList.add("is-hidden");
+    document.getElementById("modalExtrasList").innerHTML = "";
+  }
+
   updateModalTotal();
 }
 
@@ -332,7 +446,9 @@ function closeModal() {
 
 function updateModalTotal() {
   if (!currentProduct) return;
-  document.getElementById("modalAddTotal").textContent = fmt(currentProduct.price * modalQty);
+
+  const unitPrice = getUnitPrice(currentProduct, modalExtras);
+  document.getElementById("modalAddTotal").textContent = fmt(unitPrice * modalQty);
 }
 
 function debounce(fn, delay) {
@@ -343,29 +459,36 @@ function debounce(fn, delay) {
 /* ======================================================
    CARRINHO
 ====================================================== */
-function addToCart(product, qty) {
-  const existing = cart.find((i) => i.id === product.id);
+function addToCart(product, qty, extras) {
+  const itemExtras = isBurger(product) ? { ...(extras || modalExtras) } : null;
+  const key = getCartKey(product, itemExtras || {});
+  const unitPrice = getUnitPrice(product, itemExtras || {});
+  const existing = cart.find((item) => item.key === key);
+
   if (existing) {
     existing.qty += qty;
   } else {
     cart.push({
+      key,
       id: product.id,
       name: product.name,
-      price: product.price,
+      price: unitPrice,
+      extras: itemExtras,
       image: product.image,
       qty
     });
   }
+
   updateCartUI();
   showToast(`✅ ${product.name} adicionado!`);
   bumpBadge();
 }
 
-function changeCartQty(id, delta) {
-  const item = cart.find((i) => i.id === id);
+function changeCartQty(key, delta) {
+  const item = cart.find((entry) => entry.key === key);
   if (!item) return;
   item.qty += delta;
-  if (item.qty <= 0) cart = cart.filter((i) => i.id !== id);
+  if (item.qty <= 0) cart = cart.filter((entry) => entry.key !== key);
   updateCartUI();
 }
 
@@ -384,6 +507,7 @@ function updateCartUI() {
 
   list.innerHTML = "";
   cart.forEach((item) => {
+    const extrasText = item.extras ? formatExtrasText(item.extras) : null;
     const li = document.createElement("li");
     li.className = "cart-item";
     li.innerHTML = `
@@ -391,10 +515,11 @@ function updateCartUI() {
       <div class="cart-item__info">
         <p class="cart-item__name">${item.name}</p>
         <p class="cart-item__price">${fmt(item.price)} cada</p>
+        ${extrasText ? `<p class="cart-item__extras">+ ${extrasText}</p>` : ""}
         <div class="cart-item__controls">
-          <button type="button" class="qty-btn" data-id="${item.id}" data-delta="-1">−</button>
+          <button type="button" class="qty-btn" data-key="${item.key}" data-delta="-1">−</button>
           <span>${item.qty}</span>
-          <button type="button" class="qty-btn" data-id="${item.id}" data-delta="1">+</button>
+          <button type="button" class="qty-btn" data-key="${item.key}" data-delta="1">+</button>
         </div>
       </div>
     `;
@@ -403,7 +528,7 @@ function updateCartUI() {
 
   list.querySelectorAll(".qty-btn").forEach((btn) => {
     btn.addEventListener("click", () =>
-      changeCartQty(Number(btn.dataset.id), Number(btn.dataset.delta))
+      changeCartQty(btn.dataset.key, Number(btn.dataset.delta))
     );
   });
 
@@ -465,7 +590,13 @@ function finalizarPedido() {
 
   closeAddrModal();
 
-  const lines = cart.map((i) => `• ${i.name} x${i.qty} — ${fmt(i.price * i.qty)}`);
+  const lines = cart.map((item) => {
+    const extrasText = item.extras ? formatExtrasText(item.extras) : null;
+    const itemLine = extrasText
+      ? `• ${item.name} x${item.qty} (${extrasText}) — ${fmt(item.price * item.qty)}`
+      : `• ${item.name} x${item.qty} — ${fmt(item.price * item.qty)}`;
+    return itemLine;
+  });
   const total = cart.reduce((s, i) => s + i.price * i.qty, 0);
 
   const enderecoBloco = [
@@ -486,11 +617,7 @@ function finalizarPedido() {
     pagamento === "dinheiro" ? `💵 *Troco para:* ${troco || "Não precisa de troco"}` : null
   ].filter(Boolean).join("\n");
 
-  const numeroPedido = gerarNumeroPedido();
-
   const msg = [
-    `*PEDIDO #${numeroPedido}*`,
-    ``,
     `🍔 *JR BURGUER — Novo Pedido*`,
     ``,
     ...lines,
@@ -538,6 +665,8 @@ function bumpBadge() {
    INICIALIZAÇÃO
 ====================================================== */
 document.addEventListener("DOMContentLoaded", () => {
+  resetModalExtras();
+
   /* Banner + Logo */
   document.getElementById("bannerImage").src = encodeURI(BANNER_IMAGE);
   document.getElementById("profileLogo").src  = encodeURI(PROFILE_IMAGE);
@@ -588,7 +717,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("modalAdd").addEventListener("click", (e) => {
     if (!currentProduct) return;
-    addToCart(currentProduct, modalQty);
+    addToCart(currentProduct, modalQty, modalExtras);
     const btn = e.currentTarget;
     const label = document.getElementById("modalAddLabel");
     label.textContent = "Adicionado ✓";
