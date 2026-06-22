@@ -37,7 +37,7 @@ const BURGERS = [
   },
   {
     id: 5,
-    name: "JR Bacon Duplo",
+    name: "JR Imperador",
     desc: "Pão artesanal, molho caseiro, hambúrguer duplo (400g), queijo cheddar, bacon, alface e tomate. O mais completo!",
     price: 45.0,
     image: "jrbaconduplo.png"
